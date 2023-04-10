@@ -16,6 +16,10 @@ bool do_system(const char *cmd)
  *   and return a boolean true if the system() call completed with success
  *   or false() if it returned a failure
 */
+    int status = system(cmd);
+    if (status == -1) {
+        return false;
+    }
 
     return true;
 }
@@ -45,10 +49,7 @@ bool do_exec(int count, ...)
         command[i] = va_arg(args, char *);
     }
     command[count] = NULL;
-    // this line is to avoid a compile warning before your implementation is complete
-    // and may be removed
-    command[count] = command[count];
-
+  
 /*
  * TODO:
  *   Execute a system command by calling fork, execv(),
@@ -58,7 +59,30 @@ bool do_exec(int count, ...)
  *   as second argument to the execv() command.
  *
 */
+    if (command[0][0] != '/') {
+        va_end(args);
+        return false;
+    }
 
+    pid_t pid = fork();
+    if (pid < 0) {
+        return false;
+    } else if (pid == 0) {
+        execv(command[0], command);
+        exit(1);
+    } else {
+        int status;
+        if (waitpid(pid, &status, 0) < 0) {
+            return false;
+        }
+        if (WIFEXITED(status) && WEXITSTATUS(status) == 0) {
+            va_end(args);
+            return true;
+        } else {
+            va_end(args);
+            return false;
+        }
+    }
     va_end(args);
 
     return true;
@@ -80,10 +104,6 @@ bool do_exec_redirect(const char *outputfile, int count, ...)
         command[i] = va_arg(args, char *);
     }
     command[count] = NULL;
-    // this line is to avoid a compile warning before your implementation is complete
-    // and may be removed
-    command[count] = command[count];
-
 
 /*
  * TODO
@@ -93,6 +113,30 @@ bool do_exec_redirect(const char *outputfile, int count, ...)
  *
 */
 
+    pid_t pid = fork();
+    if (pid == -1) {
+        return false;
+    }
+    if (pid == 0) {
+        int fd = open(outputfile, O_WRONLY | O_CREAT | O_TRUNC, 0664);
+        if (fd == -1) {
+            exit(1);
+        }
+        if (dup2(fd, STDOUT_FILENO) == -1) {
+            exit(1);
+        }
+        if (dup2(fd, STDERR_FILENO) == -1) {
+          exit(1);
+        }
+        close(fd);
+        
+        execv(command[0], command);
+    } else {
+        int status;
+        if (waitpid(pid, &status, 0) == -1) {
+            return false;
+        }
+    }
     va_end(args);
 
     return true;
